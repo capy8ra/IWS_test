@@ -18,6 +18,7 @@ The system uses a scripted policy that generates 4 types of motions:
 
 # %%
 import os
+import subprocess
 import time
 from multiprocessing.managers import SharedMemoryManager
 from pathlib import Path
@@ -26,6 +27,37 @@ import click
 import cv2
 import numpy as np
 import transforms3d
+
+
+class H264VideoWriter:
+    """ffmpeg-backed H.264 MP4 writer. Browser-playable, unlike OpenCV's mp4v."""
+
+    def __init__(
+        self, path: str, width: int, height: int, fps: float, pix_fmt: str = "bgr24"
+    ) -> None:
+        cmd = [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "rawvideo", "-pix_fmt", pix_fmt,
+            "-s", f"{width}x{height}", "-r", str(fps),
+            "-i", "-",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-preset", "fast", "-movflags", "+faststart",
+            path,
+        ]
+        self._proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+        self._closed = False
+
+    def write(self, frame: np.ndarray) -> None:
+        assert self._proc.stdin is not None
+        self._proc.stdin.write(np.ascontiguousarray(frame).tobytes())
+
+    def release(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        if self._proc.stdin is not None:
+            self._proc.stdin.close()
+        self._proc.wait()
 from gym_aloha.env import AlohaEnv
 from yixuan_utilities.hdf5_utils import save_dict_to_hdf5
 from yixuan_utilities.kinematics_helper import KinHelper
@@ -262,16 +294,10 @@ def save_episode(episode: dict, output_dir: str, episode_id: int) -> None:
         # Get video dimensions
         num_frames, height, width, channels = video_frames.shape
 
-        # Create video writer
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        out = cv2.VideoWriter(video_path, fourcc, 30.0, (width, height))
-
-        # Write frames to video
+        # Write frames as H.264 via ffmpeg (browser-playable). Frames are RGB.
+        out = H264VideoWriter(video_path, width, height, 30.0, pix_fmt="rgb24")
         for frame in video_frames:
-            # Convert RGB to BGR for OpenCV
-            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            out.write(frame_bgr)
-
+            out.write(frame)
         out.release()
 
     print(f"Episode {episode_id} saved!")
@@ -441,6 +467,7 @@ def task_reset(
     acc_lim: float,
     vel_lim: float,
     headless: bool,
+    debug_write: Optional[callable] = None,
 ) -> None:
     env.reset(seed=int(time.time()))
     obs = env._env.task.get_observation(env._env.physics)
@@ -453,6 +480,7 @@ def task_reset(
     curr_vel = np.zeros(6)
     curr_puppet_joint = obs["qpos"][:14]
     dt = 1 / 10.0
+    need_vis = (not headless) or (debug_write is not None)
     for _ in range(100):
         obs = env._env.task.get_observation(env._env.physics)
         curr_puppet_joint = obs["qpos"][:14]
@@ -470,11 +498,14 @@ def task_reset(
         )
         env.step(joint_actions)
         obs = env._env.task.get_observation(env._env.physics)
-        if not headless:
+        if need_vis:
             vis_img = vis_obs(obs, episode_id, False, env)
-            vis_img = cv2.cvtColor(vis_img, cv2.COLOR_RGB2BGR)
-            cv2.imshow("Aloha Dataset Collection", vis_img)
-            cv2.waitKey(1)
+            vis_img_bgr = cv2.cvtColor(vis_img, cv2.COLOR_RGB2BGR)
+            if not headless:
+                cv2.imshow("Aloha Dataset Collection", vis_img_bgr)
+                cv2.waitKey(1)
+            if debug_write is not None:
+                debug_write(vis_img_bgr)
 
 
 @click.command()
@@ -483,8 +514,16 @@ def task_reset(
 )
 @click.option("--motion_type", "-mt", default="random_no_contact", help="Motion type.")
 @click.option("--headless", "-h", is_flag=True, help="Run in headless mode.")
+@click.option(
+    "--debug_video",
+    is_flag=True,
+    help="Save a vis MP4 for every attempt (success or fail) to <output_dir>/debug_videos/.",
+)
 def main(
-    output_dir: str, motion_type: str = "random_no_contact", headless: bool = False
+    output_dir: str,
+    motion_type: str = "random_no_contact",
+    headless: bool = False,
+    debug_video: bool = False,
 ) -> None:
     frequency = 10.0
     dt = 1 / frequency
@@ -512,8 +551,43 @@ def main(
     is_recording = False
     episode = init_episode()
 
+    debug_dir = os.path.join(output_dir, "debug_videos")
+    if debug_video:
+        os.makedirs(debug_dir, exist_ok=True)
+    debug_state = {"writer": None, "attempt_idx": 0}
+
+    def debug_write_frame(img_bgr: np.ndarray) -> None:
+        if not debug_video:
+            return
+        if debug_state["writer"] is None:
+            h, w = img_bgr.shape[:2]
+            path = os.path.join(
+                debug_dir, f"attempt_{debug_state['attempt_idx']:05d}.mp4"
+            )
+            debug_state["writer"] = H264VideoWriter(path, w, h, 30, pix_fmt="bgr24")
+        debug_state["writer"].write(img_bgr)
+
+    def debug_close_attempt(outcome: str) -> None:
+        if not debug_video or debug_state["writer"] is None:
+            return
+        debug_state["writer"].release()
+        debug_state["writer"] = None
+        old = os.path.join(
+            debug_dir, f"attempt_{debug_state['attempt_idx']:05d}.mp4"
+        )
+        new = os.path.join(
+            debug_dir, f"attempt_{debug_state['attempt_idx']:05d}_{outcome}.mp4"
+        )
+        if os.path.exists(old):
+            os.rename(old, new)
+        debug_state["attempt_idx"] += 1
+
+    debug_cb = debug_write_frame if debug_video else None
+
     # sample to a random init action
-    task_reset(env, episode_id, kin_helper, k_p, k_v, acc_lim, vel_lim, headless)
+    task_reset(
+        env, episode_id, kin_helper, k_p, k_v, acc_lim, vel_lim, headless, debug_cb
+    )
 
     # Initialize scripted policy components
     workspace_constraints = WorkspaceConstraints(
@@ -566,6 +640,7 @@ def main(
                     episode_id += 1
                 else:
                     print(f"Episode {episode_id} was NOT successful!")
+                debug_close_attempt("success" if episode_success else "fail")
                 trial_num += 1
                 print(
                     "Current success rate: ",
@@ -573,7 +648,8 @@ def main(
                 )
                 episode = init_episode()
                 task_reset(
-                    env, episode_id, kin_helper, k_p, k_v, acc_lim, vel_lim, headless
+                    env, episode_id, kin_helper, k_p, k_v, acc_lim, vel_lim, headless,
+                    debug_cb,
                 )
                 is_recording = False
                 print(
@@ -582,11 +658,14 @@ def main(
                 episode_start_time = None
 
         # visualize
-        vis_img = vis_obs(obs, episode_id, is_recording, env, current_trajectory)
-        if not headless:
-            vis_img = cv2.cvtColor(vis_img, cv2.COLOR_RGB2BGR)
-            cv2.imshow("Aloha Dataset Collection", vis_img)
-            cv2.waitKey(1)
+        if (not headless) or debug_video:
+            vis_img = vis_obs(obs, episode_id, is_recording, env, current_trajectory)
+            vis_img_bgr = cv2.cvtColor(vis_img, cv2.COLOR_RGB2BGR)
+            if not headless:
+                cv2.imshow("Aloha Dataset Collection", vis_img_bgr)
+                cv2.waitKey(1)
+            if debug_video:
+                debug_write_frame(vis_img_bgr)
 
         # Generate scripted policy actions
         puppet_target_state = np.zeros(14)
@@ -597,7 +676,8 @@ def main(
             while not success:
                 episode = init_episode()
                 task_reset(
-                    env, episode_id, kin_helper, k_p, k_v, acc_lim, vel_lim, headless
+                    env, episode_id, kin_helper, k_p, k_v, acc_lim, vel_lim, headless,
+                    debug_cb,
                 )
                 obs = env._env.task.get_observation(env._env.physics)
 
