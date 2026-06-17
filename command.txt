@@ -1,0 +1,29 @@
+pip install gradio
+
+# Fix A: public tunnel (open the printed *.gradio.live URL on your laptop)
+python scripts/inference/teleoperate_gradio.py \
+  +output_dir='data/wm_demo' \
+  +use_joystick=false +use_dataset=false +act_horizon=1 +scene=real \
+  "+ckpt_paths=['outputs/pusht_cam1/checkpoints/best.ckpt']" \
+  dataset=real_aloha_dataset \
+  dataset.dataset_dir=data/mini/pusht/val \
+  "dataset.obs_keys=['camera_1_color']" \
+  +share=true
+
+# Fix B: use VS Code port forwarding (look at the forwarded URL path)
+python scripts/inference/teleoperate_gradio.py \
+  +output_dir='data/wm_demo' \
+  +use_joystick=false +use_dataset=false +act_horizon=1 +scene=real \
+  "+ckpt_paths=['outputs/pusht_cam1/checkpoints/best.ckpt']" \
+  dataset=real_aloha_dataset \
+  dataset.dataset_dir=data/mini/pusht/val \
+  "dataset.obs_keys=['camera_1_color']" \
+  +root_path=/user/peng33/proxy/7860
+
+# Scripted data collection (headless + debug videos of every attempt).
+# Debug MP4s saved to data/mujoco/pusht/train/debug_videos/attempt_<N>_<success|fail>.mp4
+MUJOCO_GL=egl python scripts/data_collection/sim_aloha_dataset_collection_scripted.py \
+  --output_dir data/mujoco/pusht/train \
+  --motion_type random_no_contact \
+  --headless \
+  --debug_video
