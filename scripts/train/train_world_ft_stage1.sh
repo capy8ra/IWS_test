@@ -13,8 +13,8 @@ cd "$(dirname "$0")/../.."   # repo root
 # --- auto-resume ---------------------------------------------------------------
 # Every run of this script writes checkpoints under
 #   outputs/world_ft_stage_1/<timestamp>/checkpoints/
-# `save_last=true` keeps a stable `last.ckpt` there, refreshed every
-# `every_n_train_steps` steps (see below). On startup we look for the most recent
+# `save_last=true` keeps a stable `last.ckpt` there, refreshed at the end of
+# every training epoch (see below). On startup we look for the most recent
 # `last.ckpt` from a previous run of THIS experiment and resume full training
 # state from it (weights + optimizer + lr-scheduler + global step count), so an
 # interrupted run picks up exactly where it left off.
@@ -41,7 +41,10 @@ python main.py +name=world_ft_stage_1 \
   experiment.training.batch_size=16 \
   experiment.training.max_steps=1000005 \
   experiment.training.log_every_n_steps=100 \
-  experiment.training.checkpointing.every_n_train_steps=25 \
+  experiment.training.checkpointing.every_n_train_steps=0 \
+  experiment.training.checkpointing.every_n_epochs=1 \
+  +experiment.training.checkpointing.save_on_train_epoch_end=true \
+  +experiment.training.checkpointing.save_top_k=0 \
   +experiment.training.checkpointing.save_last=true \
   experiment.validation.limit_batch=1.0 \
   experiment.validation.batch_size=10 \

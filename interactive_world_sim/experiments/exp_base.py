@@ -239,6 +239,10 @@ class BaseLightningExperiment(BaseExperiment):
             train_dataloaders=train_dataloader,
             val_dataloaders=val_dataloader,
             ckpt_path=self.ckpt_path,
+            # Our checkpoints embed the OmegaConf cfg; torch>=2.6 defaults
+            # weights_only=True, which can't unpickle those objects. These are
+            # our own (trusted) checkpoints, so load them with weights_only=False.
+            weights_only=False,
         )
 
     def validation(self) -> None:
@@ -274,6 +278,7 @@ class BaseLightningExperiment(BaseExperiment):
             self.algo,
             dataloaders=val_dataloader,
             ckpt_path=self.ckpt_path,
+            weights_only=False,  # trusted ckpt embeds OmegaConf cfg; see training()
         )
 
     def test(self) -> None:
@@ -303,6 +308,7 @@ class BaseLightningExperiment(BaseExperiment):
             self.algo,
             dataloaders=self._build_test_loader(),
             ckpt_path=self.ckpt_path,
+            weights_only=False,  # trusted ckpt embeds OmegaConf cfg; see training()
         )
 
     def _build_dataset(self, split: str) -> Optional[torch.utils.data.Dataset]:
