@@ -6,10 +6,12 @@ from omegaconf import DictConfig
 
 from .exp_base import BaseExperiment
 from .exp_latent_dyn import LatentDynExperiment
+from .exp_latent_dyn_torque import LatentDynTorqueExperiment
 
 # each key has to be a yaml file under '[project_root]/configurations/experiment' without .yaml suffix # noqa
 exp_registry = dict(
     exp_latent_dyn=LatentDynExperiment,
+    exp_latent_dyn_torque=LatentDynTorqueExperiment,
 )
 
 

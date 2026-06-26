@@ -1,0 +1,4 @@
+# Stage-2 dynamics + torque experiment. Selects LatentDynTorqueExperiment by name;
+# all training/validation settings inherited from exp_latent_dyn.
+defaults:
+  - exp_latent_dyn

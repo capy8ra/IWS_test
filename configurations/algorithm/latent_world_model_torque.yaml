@@ -1,0 +1,11 @@
+# Stage-2 latent dynamics + right-arm joint-torque head.
+# Inherits everything from latent_world_model and adds the torque settings.
+defaults:
+  - latent_world_model
+
+# 8-DoF right-arm q_des action (overrides the base 10/4-D task action)
+action_dim: 8
+
+# torque head
+torque_dim: 8
+torque_loss_weight: 1.0

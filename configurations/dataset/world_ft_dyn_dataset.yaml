@@ -1,0 +1,14 @@
+# Stage-2 dynamics dataset: right-arm q_des action + joint-torque target.
+# Inherits real_aloha_dataset; selects the WorldFtDynDataset class by name.
+defaults:
+  - real_aloha_dataset
+
+dataset_dir: data/world_ft_v2
+action_mode: right_qpos
+horizon: 10
+val_horizon: 200
+
+shape_meta:
+  action:
+    shape:
+      - 8

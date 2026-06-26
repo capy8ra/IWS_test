@@ -104,26 +104,36 @@ def _convert_real_to_dp_replay(
             # save lowdim data to lowedim_data_dict
             if "action" not in lowdim_data_dict:
                 lowdim_data_dict["action"] = list()
-            action_ls = []
-            for t in range(file["obs"]["full_joint_pos"].shape[0]):
-                joint_pos = file["obs"]["joint_pos"][t]
-                num_rob = joint_pos.shape[0] // 7
-                for r_i in range(num_rob):
-                    joint_pos[r_i * 7 + 6] = MASTER_GRIPPER_JOINT_UNNORMALIZE_FN(
-                        PUPPET_GRIPPER_JOINT_NORMALIZE_FN(joint_pos[r_i * 7 + 6])
+            if ctrl_mode == "right_qpos":
+                # stage-2: raw desired joint position q_des (8 DoF incl. gripper)
+                # is used directly as the action -- no forward kinematics.
+                action_data = file["action"][()].astype(np.float32)
+            else:
+                action_ls = []
+                for t in range(file["obs"]["full_joint_pos"].shape[0]):
+                    joint_pos = file["obs"]["joint_pos"][t]
+                    num_rob = joint_pos.shape[0] // 7
+                    for r_i in range(num_rob):
+                        joint_pos[r_i * 7 + 6] = MASTER_GRIPPER_JOINT_UNNORMALIZE_FN(
+                            PUPPET_GRIPPER_JOINT_NORMALIZE_FN(joint_pos[r_i * 7 + 6])
+                        )
+                    action = joint_pos_to_action_primitive(
+                        joint_pos=joint_pos,
+                        ctrl_mode=ctrl_mode,
+                        base_pose_in_world=file["obs"]["world_t_robot_base"][t],
+                        kin_helper=kin_helper,
                     )
-                action = joint_pos_to_action_primitive(
-                    joint_pos=joint_pos,
-                    ctrl_mode=ctrl_mode,
-                    base_pose_in_world=file["obs"]["world_t_robot_base"][t],
-                    kin_helper=kin_helper,
-                )
-                action_ls.append(action)
-            action_data = np.concatenate(action_ls)
-            # preventing overgrasping
-            if ctrl_mode == "single_grasp":
-                action_data[:, -1] = file["action"][:, -1]
+                    action_ls.append(action)
+                action_data = np.concatenate(action_ls)
+                # preventing overgrasping
+                if ctrl_mode == "single_grasp":
+                    action_data[:, -1] = file["action"][:, -1]
             lowdim_data_dict["action"].append(action_data)
+            # stage-2: measured joint-torque target (loaded only when present)
+            if "joint_torque" in file["obs"]:
+                lowdim_data_dict.setdefault("joint_torque", []).append(
+                    file["obs"]["joint_torque"][()].astype(np.float32)
+                )
 
             for key in rgb_keys:
                 if key not in rgb_data_dict:
