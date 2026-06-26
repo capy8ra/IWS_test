@@ -177,3 +177,6 @@ outputs_dp/
 lightning_logs/
 optuna_studies/
 .gradio/
+
+# local secrets (W&B key) -- never commit
+scripts/train/wandb_key.local.sh

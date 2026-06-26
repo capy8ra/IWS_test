@@ -9,3 +9,10 @@ action_dim: 8
 # torque head
 torque_dim: 8
 torque_loss_weight: 1.0
+
+# which torque head to use:
+#   separate       -> standalone CNN+GRU re-encoder on latents (original)
+#   trunk_midblock -> MLP branching off the dynamics U-Net mid-block features
+torque_head_source: separate
+# only used by trunk_midblock: condition the MLP on the per-frame noise level
+torque_noise_cond: true
