@@ -53,6 +53,11 @@ def L(ep, stream, field):
     return np.load(os.path.join(ep, "low_dim_npys", f"{stream}:{field}.npy"))
 
 
+def has_field(ep, stream, field):
+    """True if low_dim_npys/<stream>:<field>.npy exists for this episode."""
+    return os.path.exists(os.path.join(ep, "low_dim_npys", f"{stream}:{field}.npy"))
+
+
 def _monotonic(t, v):
     """Sanitize a (timestamp, value) series into strictly-increasing form.
 
@@ -157,10 +162,17 @@ def convert_episode(ep, out_path):
     r_ang = F("follower_right_state", "actual_angle_rad")     # (T,8)
     l_ang = F("follower_left_state", "actual_angle_rad")      # (T,8)
 
-    # controller wrench / interaction torque (saved only)
-    r_wrench = F("follower_controller_state", "wrench_hand_tcp_R")              # (T,6)
-    r_wrench_ic = F("follower_controller_state", "wrench_hand_tcp_inertiacomp_R")  # (T,6)
-    r_tau_int = F("follower_controller_state", "tau_interaction_R")             # (T,8)
+    # controller wrench / interaction torque (saved only; OPTIONAL -- some
+    # recordings omit the wrench streams. Skipped cleanly when absent; Stage-1/2
+    # never read these aux fields.)
+    cs = "follower_controller_state"
+    r_wrench = F(cs, "wrench_hand_tcp_R") if has_field(ep, cs, "wrench_hand_tcp_R") else None  # (T,6)
+    r_wrench_ic = (
+        F(cs, "wrench_hand_tcp_inertiacomp_R")
+        if has_field(ep, cs, "wrench_hand_tcp_inertiacomp_R")
+        else None
+    )  # (T,6)
+    r_tau_int = F(cs, "tau_interaction_R") if has_field(ep, cs, "tau_interaction_R") else None  # (T,8)
 
     joint_pos = np.concatenate([arm7(r_ang), arm7(l_ang)], axis=1).astype(np.float32)  # (T,14)
     full_joint_pos = np.concatenate([r_ang, l_ang], axis=1).astype(np.float32)         # (T,16)
@@ -176,9 +188,12 @@ def convert_episode(ep, out_path):
         obs.create_dataset("world_t_robot_base", data=base)
         obs.create_dataset("joint_torque", data=r_torque.astype(np.float32))   # [stage-2 target]
         obs.create_dataset("joint_vel", data=r_vel.astype(np.float32))
-        obs.create_dataset("wrench_hand_tcp", data=r_wrench.astype(np.float32))
-        obs.create_dataset("wrench_hand_tcp_inertiacomp", data=r_wrench_ic.astype(np.float32))
-        obs.create_dataset("tau_interaction", data=r_tau_int.astype(np.float32))
+        if r_wrench is not None:
+            obs.create_dataset("wrench_hand_tcp", data=r_wrench.astype(np.float32))
+        if r_wrench_ic is not None:
+            obs.create_dataset("wrench_hand_tcp_inertiacomp", data=r_wrench_ic.astype(np.float32))
+        if r_tau_int is not None:
+            obs.create_dataset("tau_interaction", data=r_tau_int.astype(np.float32))
         imgs = obs.create_group("images")
         imgs.create_dataset(
             IMG_KEY, data=frames, dtype="uint8",
