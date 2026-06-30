@@ -472,13 +472,22 @@ class QKVAttention(nn.Module):
             ek, ev = encoder_kv.reshape(bs * self.n_heads, ch * 2, -1).split(ch, dim=1)
             k = th.cat([ek, k], dim=-1)
             v = th.cat([ev, v], dim=-1)
-        scale = 1 / math.sqrt(math.sqrt(ch))
-        weight = th.einsum(
-            "bct,bcs->bts", q * scale, k * scale
-        )  # More stable with f16 than dividing afterwards
-        weight = th.softmax(weight.float(), dim=-1).type(weight.dtype)
-        a = th.einsum("bts,bcs->bct", weight, v)
+        # scale = 1 / math.sqrt(math.sqrt(ch))
+        # weight = th.einsum(
+        #     "bct,bcs->bts", q * scale, k * scale
+        # )  # More stable with f16 than dividing afterwards
+        # weight = th.softmax(weight.float(), dim=-1).type(weight.dtype)
+        # a = th.einsum("bts,bcs->bct", weight, v)
+        # return a.reshape(bs, -1, length)
+        
+        # mem-efficient attention; default scale = 1/sqrt(ch) == original
+        a = th.nn.functional.scaled_dot_product_attention(
+            q.transpose(-1, -2).contiguous(),
+            k.transpose(-1, -2).contiguous(),
+            v.transpose(-1, -2).contiguous(),
+        ).transpose(-1, -2)
         return a.reshape(bs, -1, length)
+
 
 
 class DiffAEUNetModel(nn.Module):

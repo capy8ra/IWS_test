@@ -366,6 +366,7 @@ def load_replay_buffer(
             cache_info_str = f"_res_{res}"
         else:
             cache_info_str = ""
+        cache_info_str += f"_{ctrl_mode}"
         cache_zarr_path = os.path.join(dataset_dir, f"cache{cache_info_str}.zarr.zip")
         cache_lock_path = cache_zarr_path + ".lock"
         print("Acquiring lock on cache.")

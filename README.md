@@ -1,3 +1,18 @@
+# AI Studio env
+cd /team/shaoting.peng/world_ft/
+source env.local.sh              # 每个新终端先来一次（激活 env + 设变量）
+
+bash scripts/train/run_stage1.sh           # Stage 1，2 卡（默认）
+NGPU=8 bash scripts/train/run_stage1.sh    # 4 卡
+NGPU=1 bash scripts/train/run_stage1.sh    # 单卡
+CUDA_VISIBLE_DEVICES=2,3 bash scripts/train/run_stage1.sh   # 指定用哪两张卡
+BATCH=24 NGPU=2 bash scripts/train/run_stage1.sh           # 调每卡 batch
+
+bash scripts/train/run_stage2.sh                  # Stage 2（separate head）
+HEAD=trunk_midblock bash scripts/train/run_stage2.sh       # trunk head
+HEAD=trunk_midblock NGPU=4 bash scripts/train/run_stage2.sh
+
+
 # Interactive World Simulator for Robot Policy Training and Evaluation
 
 [Yixuan Wang](https://yixuanwang.me/)<sup>1</sup>, [Rhythm Syed](https://rhythmsyed.github.io/)<sup>1</sup>, [Fangyu Wu](https://fangyuwu.com/)<sup>1</sup>, [Mengchao Zhang](https://zmccmzty.github.io/)<sup>2</sup>, [Aykut Onol](https://scholar.google.com/citations?user=mMYFmOYAAAAJ&hl=en)<sup>2</sup>, [Jose Barreiros](https://scholar.google.com/citations?user=mLFRRpkAAAAJ&hl=en)<sup>2</sup>, [Hooshang Nayyeri](https://www.amazon.science/author/hooshang-nayyeri)<sup>3</sup>, [Tony Dear](https://tonydear.com/)<sup>1</sup>, [Huan Zhang](https://www.huan-zhang.com/)<sup>4</sup>, [Yunzhu Li](https://yunzhuli.github.io/)<sup>1</sup>

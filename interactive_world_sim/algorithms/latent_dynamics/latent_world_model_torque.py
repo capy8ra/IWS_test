@@ -270,4 +270,29 @@ class LatentWorldModelTorque(LatentWorldModel):
             trmse = torch.sqrt(tmse)  # predictions already in N·m
         self.log(f"{namespace}/torque_mse", tmse)
         self.log(f"{namespace}/torque_rmse_nm", trmse)
+        # ---- 预测 vs 真值 torque 曲线 -> wandb（仅 rank0、首个 val batch、首个样本）----
+        if batch_idx == 0 and self.trainer.is_global_zero and self.logger is not None:
+            import matplotlib; matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            import wandb
+            tp = torque_pred[0].float().cpu().numpy()    # (T, 8)
+            tg = torque_target[0].float().cpu().numpy()  # (T, 8)
+            T, D = tp.shape
+            ncol, nrow = 4, (D + 3) // 4
+            fig, axes = plt.subplots(nrow, ncol, figsize=(4 * ncol, 2.2 * nrow), squeeze=False)
+            for j in range(D):
+                ax = axes[j // ncol][j % ncol]
+                ax.plot(tg[:, j], lw=1.3, label="gt")
+                ax.plot(tp[:, j], lw=1.0, ls="--", label="pred")
+                rmse = float(((tp[:, j] - tg[:, j]) ** 2).mean() ** 0.5)
+                ax.set_title(f"joint {j}  rmse={rmse:.2f} N·m", fontsize=8)
+                ax.tick_params(labelsize=6)
+                if j == 0:
+                    ax.legend(fontsize=7)
+            for j in range(D, nrow * ncol):
+                axes[j // ncol][j % ncol].axis("off")
+            fig.tight_layout()
+            self.logger.experiment.log({f"{namespace}/torque_curves": wandb.Image(fig)})
+            plt.close(fig)
+
         return None
