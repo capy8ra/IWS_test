@@ -62,7 +62,7 @@ conda activate iws
 
 **Step 2**: Install Python dependencies.
 ```bash
-uv pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu126/
+uv pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu128/
 ```
 
 **Step 3**: Install the package in editable mode.
