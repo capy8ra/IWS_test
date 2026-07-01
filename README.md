@@ -12,6 +12,11 @@ bash scripts/train/run_stage2.sh                  # Stage 2（separate head）
 HEAD=trunk_midblock bash scripts/train/run_stage2.sh       # trunk head
 HEAD=trunk_midblock NGPU=4 bash scripts/train/run_stage2.sh
 
+python scripts/inference/rollout_world_ft.py \
+  --ckpt "$(ls -t outputs/world_ft_stage_2/*/checkpoints/last.ckpt | head -1)" \
+  --data_dir data/world_ft_v3 --split val \
+  --out wm_rollout
+
 
 # Interactive World Simulator for Robot Policy Training and Evaluation
 
